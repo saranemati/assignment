@@ -1,0 +1,25 @@
+#name: Queue
+
+#on: 
+#    pull_request:
+#       branches:
+#            - main
+#    push:
+#        branches:
+#            - '*'
+
+#jobs:
+#    check:
+#        name: Build & Test
+#        runs-on: ubuntu-latest
+#        steps:
+#            - name: Checkout
+#              uses: actions/checkout@v4
+#            - name: Install
+#              run: |
+#                sudo apt-get install cmake build-essential
+#                sudo apt-get install googletest google-mock libgtest-dev libgmock-dev
+#            - name: Build and Run The Test
+#              run: |
+#                mkdir build && cd build && cmake ..
+#                make test_queue && ./test_queue
