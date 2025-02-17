@@ -11,9 +11,11 @@ struct IMemory
     virtual ~IMemory() = default;
 };
 
-template <typename T>
+template <typename T, size_t N>
 class Queue
 {
+    static_assert(N > 2, "Queue must be at least 3!");
+
     struct node_t
     {
         T data;
@@ -39,6 +41,10 @@ public:
 
     bool dequeue(T &item);
 
+    bool isFull();
+
+    double average();
+
     size_t size(void) { return count; }
 
     void clear(void);
@@ -46,16 +52,16 @@ public:
     ~Queue() { clear(); }
 };
 
-template <typename T>
-Queue<T>::Queue(Queue<T> &&that) noexcept : memory{that.memory}, count{that.count}, head{that.head}, tail{that.tail}
+template <typename T, size_t N>
+Queue<T, N>::Queue(Queue<T, N> &&that) noexcept : memory{that.memory}, count{that.count}, head{that.head}, tail{that.tail}
 {
     that.count = 0;
     that.head = nullptr;
     that.tail = nullptr;
 }
 
-template <typename T>
-Queue<T> &Queue<T>::operator=(Queue<T> &&that) noexcept
+template <typename T, size_t N>
+Queue<T, N> &Queue<T, N>::operator=(Queue<T, N> &&that) noexcept
 {
     if (this != &that)
     {
@@ -74,28 +80,28 @@ Queue<T> &Queue<T>::operator=(Queue<T> &&that) noexcept
     return *this;
 }
 
-template <typename T>
-bool Queue<T>::enqueue(const T &item)
+template <typename T, size_t N>
+bool Queue<T, N>::enqueue(const T &item)
 {
     bool status{false};
 
-    // malloc only allocates memory for a node_t. It does not construct a node_t;
     node_t *node{static_cast<node_t *>(memory.malloc(sizeof(node_t)))};
 
     if (node != nullptr)
     {
-        // Placement new is used to construct an object in an allocated block of memory.
         (void)new (node) node_t{item, nullptr};
 
         if (head == nullptr)
         {
             head = node;
             tail = head;
+            tail->next = head;
         }
         else
         {
             tail->next = node;
             tail = node;
+            tail->next = head;
         }
 
         status = true;
@@ -105,10 +111,15 @@ bool Queue<T>::enqueue(const T &item)
     return status;
 }
 
-template <typename T>
-bool Queue<T>::dequeue(T &item)
+template <typename T, size_t N>
+bool Queue<T, N>::dequeue(T &item)
 {
     bool status{false};
+
+    if (count <= N) // Prevent shrinking below MinSize
+    {
+        return false;
+    }
 
     if (head != nullptr)
     {
@@ -131,8 +142,31 @@ bool Queue<T>::dequeue(T &item)
     return status;
 }
 
-template <typename T>
-void Queue<T>::clear(void)
+template <typename T, size_t N>
+bool Queue<T, N>::isFull()
+{
+    return count == N;
+}
+
+template <typename T, size_t N>
+double Queue<T, N>::average()
+{
+    if (isalpha(T))
+    {
+        double sum = 0;
+        node_t *current = head;
+
+        do
+        {
+            sum += current->data;
+            current = current->next;
+        } while (current != head);
+    }
+    return sum / count;
+}
+
+template <typename T, size_t N>
+void Queue<T, N>::clear(void)
 {
     while (head != nullptr)
     {
