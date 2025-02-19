@@ -11,10 +11,9 @@ struct IMemory
     virtual ~IMemory() = default;
 };
 
-template <typename T, size_t N>
+template <typename T>
 class Queue
 {
-    static_assert(N > 2, "Queue must be at least 3!");
 
     struct node_t
     {
@@ -24,6 +23,7 @@ class Queue
 
     IMemory &memory;
     size_t count{0};
+    size_t maxSize; // Now runtime-configurable
     node_t *head{nullptr};
     node_t *tail{nullptr};
 
@@ -31,7 +31,28 @@ public:
     Queue(const Queue &) = delete;
     Queue &operator=(const Queue &) = delete;
 
-    Queue(IMemory &_memory) : memory{_memory} {}
+    Queue(IMemory &_memory, size_t size) : memory{_memory}, maxSize{size}
+    {
+        if (maxSize < 3)
+            maxSize = 3; // Ensure at least 3 elements
+
+        node_t *prev = nullptr;
+        for (size_t i = 0; i < maxSize; i++)
+        {
+            node_t *node = static_cast<node_t *>(memory.malloc(sizeof(node_t)));
+            if (!node)
+                break;
+            (void)new (node) node_t{T{}, nullptr};
+            if (!head)
+                head = node;
+            else
+                prev->next = node;
+            prev = node;
+        }
+        tail = prev;
+        if (tail)
+            tail->next = head; // Make circular
+    }
 
     Queue(Queue &&that) noexcept;
 
@@ -45,6 +66,8 @@ public:
 
     double average();
 
+    bool resize(size_t num);
+
     size_t size(void) { return count; }
 
     void clear(void);
@@ -52,16 +75,16 @@ public:
     ~Queue() { clear(); }
 };
 
-template <typename T, size_t N>
-Queue<T, N>::Queue(Queue<T, N> &&that) noexcept : memory{that.memory}, count{that.count}, head{that.head}, tail{that.tail}
+template <typename T>
+Queue<T>::Queue(Queue<T> &&that) noexcept : memory{that.memory}, count{that.count}, head{that.head}, tail{that.tail}
 {
     that.count = 0;
     that.head = nullptr;
     that.tail = nullptr;
 }
 
-template <typename T, size_t N>
-Queue<T, N> &Queue<T, N>::operator=(Queue<T, N> &&that) noexcept
+template <typename T>
+Queue<T> &Queue<T>::operator=(Queue<T> &&that) noexcept
 {
     if (this != &that)
     {
@@ -80,10 +103,15 @@ Queue<T, N> &Queue<T, N>::operator=(Queue<T, N> &&that) noexcept
     return *this;
 }
 
-template <typename T, size_t N>
-bool Queue<T, N>::enqueue(const T &item)
+template <typename T>
+bool Queue<T>::enqueue(const T &item)
 {
     bool status{false};
+
+    if (isFull())
+    {
+        dequeue(head->data); // Overwrite oldest if full
+    }
 
     node_t *node{static_cast<node_t *>(memory.malloc(sizeof(node_t)))};
 
@@ -99,9 +127,9 @@ bool Queue<T, N>::enqueue(const T &item)
         }
         else
         {
+            node->next = head;
             tail->next = node;
             tail = node;
-            tail->next = head;
         }
 
         status = true;
@@ -111,29 +139,32 @@ bool Queue<T, N>::enqueue(const T &item)
     return status;
 }
 
-template <typename T, size_t N>
-bool Queue<T, N>::dequeue(T &item)
+template <typename T>
+bool Queue<T>::dequeue(T &item)
 {
     bool status{false};
 
-    if (count <= N) // Prevent shrinking below MinSize
+    if (count == 0) // Prevent shrinking below MinSize
     {
         return false;
     }
 
     if (head != nullptr)
     {
-        item = head->data;
+        item = head->data; // Extract the item
+        node_t *temp = head;
 
-        node_t *temp{head};
-        head = head->next;
-        temp->~node_t();
-        memory.free(temp);
-
-        if (head == nullptr)
+        if (head == tail) // Only one element in the queue
         {
-            tail = head;
+            head = nullptr;
+            tail = nullptr;
         }
+        else
+        {
+            head = head->next; // Move head forward
+            tail->next = head; // Maintain circular linking
+        }
+        memory.free(temp);
 
         status = true;
         count--;
@@ -142,41 +173,62 @@ bool Queue<T, N>::dequeue(T &item)
     return status;
 }
 
-template <typename T, size_t N>
-bool Queue<T, N>::isFull()
+template <typename T>
+bool Queue<T>::isFull()
 {
-    return count == N;
+    return count == maxSize;
 }
 
-template <typename T, size_t N>
-double Queue<T, N>::average()
+template <typename T>
+double Queue<T>::average()
 {
-    if (isalpha(T))
-    {
-        double sum = 0;
-        node_t *current = head;
+    static_assert(std::is_arithmetic<T>::value, "average() only works for arithmetic types");
 
-        do
+    double sum = 0;
+    node_t *current = head;
+    size_t elements = 0;
+
+    do
+    {
+        sum += current->data;
+        current = current->next;
+        elements++;
+    } while (current != head && elements < count);
+
+    return sum / elements;
+}
+
+template <typename T>
+bool Queue<T>::resize(size_t num)
+{
+    // enter new size (at least bigger than 2)
+    // if new size is smaller remove the oldest nodes first
+    // set new size
+    bool status{false};
+    if (num < 3)
+    {
+        status = false;
+    }
+    else
+    {
+        while (count > num)
         {
-            sum += current->data;
-            current = current->next;
-        } while (current != head);
+            T temp;
+            dequeue(temp);
+        }
+        maxSize = num;
+        status = true;
     }
-    return sum / count;
+    return status;
 }
 
-template <typename T, size_t N>
-void Queue<T, N>::clear(void)
+template <typename T>
+void Queue<T>::clear(void)
 {
-    while (head != nullptr)
+    while (count > 0)
     {
-        tail = head;
-        head = head->next;
-        tail->~node_t();
-        memory.free(tail);
+        T temp;
+        dequeue(temp);
     }
-
-    count = 0;
-    tail = head;
 }
 #endif // QUEUE_H

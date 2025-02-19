@@ -41,7 +41,7 @@ public:
     ~Memory() { EXPECT_EQ(0, vec.size()); }
 };
 
-template <typename T, size_t N>
+template <typename T>
 class QueueFixture : public ::testing::Test
 {
     const std::tuple<
@@ -54,9 +54,9 @@ class QueueFixture : public ::testing::Test
             {"aaa", "bbb", "ccc", "ddd", "eee"}};
 
 protected:
-    const std::vector<T, N> values{std::get<std::vector<T>>(allValues)};
+    const std::vector<T> values{std::get<std::vector<T>>(allValues)};
     NiceMock<Memory> mock;
-    Queue<T, N> queue{mock};
+    Queue<T> queue{mock, 5};
 
     void SetUp(void) override
     {
