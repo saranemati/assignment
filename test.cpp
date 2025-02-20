@@ -56,7 +56,7 @@ class QueueFixture : public ::testing::Test
 protected:
     const std::vector<T> values{std::get<std::vector<T>>(allValues)};
     NiceMock<Memory> mock;
-    Queue<T> queue{mock};
+    Queue<T> queue{mock, 5};
 
     void SetUp(void) override
     {
@@ -110,6 +110,29 @@ TYPED_TEST(QueueFixture, testDequeue)
     EXPECT_FALSE(this->queue.dequeue(item));
 }
 
+TYPED_TEST(QueueFixture, testEnqueueFull)
+{
+    TypeParam item;
+    size_t size = this->queue.size();
+
+    // Fill the queue to capacity
+    for (size_t i = 0; i < size; i++)
+    {
+        EXPECT_TRUE(this->queue.enqueue(this->values[i % this->values.size()]));
+    }
+
+    EXPECT_EQ(size, this->queue.size());
+    EXPECT_TRUE(this->queue.isFull());
+
+    // Overwrite oldest element
+    TypeParam newItem = this->values[0]; // Assume first item is overwritten
+    EXPECT_TRUE(this->queue.enqueue(newItem));
+
+    // Dequeue should return the second oldest element (not the overwritten one)
+    EXPECT_TRUE(this->queue.dequeue(item));
+    EXPECT_NE(item, newItem);
+}
+
 TYPED_TEST(QueueFixture, testOnlyMovable)
 {
     EXPECT_FALSE(std::is_copy_constructible<Queue<TypeParam>>::value);
@@ -125,4 +148,32 @@ TYPED_TEST(QueueFixture, testOnlyMovable)
     this->queue = std::move(temp);
     EXPECT_EQ(this->values.size(), this->queue.size());
     EXPECT_EQ(0, temp.size());
+}
+
+TYPED_TEST(QueueFixture, testResize)
+{
+    size_t originalSize = this->queue.size();
+
+    // Shrink to a smaller size
+    EXPECT_TRUE(this->queue.resize(3));
+    EXPECT_EQ(3, this->queue.size());
+
+    // Expand back to original size
+    EXPECT_TRUE(this->queue.resize(originalSize));
+    EXPECT_EQ(3, this->queue.size()); // Size doesn't increase automatically
+}
+
+TYPED_TEST(QueueFixture, testAverage)
+{
+    if constexpr (std::is_arithmetic<TypeParam>::value)
+    {
+        double sum = 0;
+        for (const auto &val : this->values)
+        {
+            sum += val;
+        }
+
+        double expectedAvg = sum / this->values.size();
+        EXPECT_DOUBLE_EQ(this->queue.average(), expectedAvg);
+    }
 }

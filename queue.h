@@ -14,6 +14,7 @@ struct IMemory
 template <typename T>
 class Queue
 {
+
     struct node_t
     {
         T data;
@@ -22,6 +23,7 @@ class Queue
 
     IMemory &memory;
     size_t count{0};
+    size_t maxSize; // Now runtime-configurable
     node_t *head{nullptr};
     node_t *tail{nullptr};
 
@@ -29,7 +31,28 @@ public:
     Queue(const Queue &) = delete;
     Queue &operator=(const Queue &) = delete;
 
-    Queue(IMemory &_memory) : memory{_memory} {}
+    Queue(IMemory &_memory, size_t size) : memory{_memory}, maxSize{size}
+    {
+        if (maxSize < 3)
+            maxSize = 3; // Ensure at least 3 elements
+
+        node_t *prev = nullptr;
+        for (size_t i = 0; i < maxSize; i++)
+        {
+            node_t *node = static_cast<node_t *>(memory.malloc(sizeof(node_t)));
+            if (!node)
+                break;
+            (void)new (node) node_t{T{}, nullptr};
+            if (!head)
+                head = node;
+            else
+                prev->next = node;
+            prev = node;
+        }
+        tail = prev;
+        if (tail)
+            tail->next = head; // Make circular
+    }
 
     Queue(Queue &&that) noexcept;
 
@@ -38,6 +61,12 @@ public:
     bool enqueue(const T &item);
 
     bool dequeue(T &item);
+
+    bool isFull();
+
+    double average();
+
+    bool resize(size_t num);
 
     size_t size(void) { return count; }
 
@@ -79,21 +108,26 @@ bool Queue<T>::enqueue(const T &item)
 {
     bool status{false};
 
-    // malloc only allocates memory for a node_t. It does not construct a node_t;
+    if (isFull())
+    {
+        dequeue(head->data); // Overwrite oldest if full
+    }
+
     node_t *node{static_cast<node_t *>(memory.malloc(sizeof(node_t)))};
 
     if (node != nullptr)
     {
-        // Placement new is used to construct an object in an allocated block of memory.
         (void)new (node) node_t{item, nullptr};
 
         if (head == nullptr)
         {
             head = node;
             tail = head;
+            tail->next = head;
         }
         else
         {
+            node->next = head;
             tail->next = node;
             tail = node;
         }
@@ -110,19 +144,27 @@ bool Queue<T>::dequeue(T &item)
 {
     bool status{false};
 
+    if (count == 0) // Prevent shrinking below MinSize
+    {
+        return false;
+    }
+
     if (head != nullptr)
     {
-        item = head->data;
+        item = head->data; // Extract the item
+        node_t *temp = head;
 
-        node_t *temp{head};
-        head = head->next;
-        temp->~node_t();
-        memory.free(temp);
-
-        if (head == nullptr)
+        if (head == tail) // Only one element in the queue
         {
-            tail = head;
+            head = nullptr;
+            tail = nullptr;
         }
+        else
+        {
+            head = head->next; // Move head forward
+            tail->next = head; // Maintain circular linking
+        }
+        memory.free(temp);
 
         status = true;
         count--;
@@ -132,17 +174,61 @@ bool Queue<T>::dequeue(T &item)
 }
 
 template <typename T>
+bool Queue<T>::isFull()
+{
+    return count == maxSize;
+}
+
+template <typename T>
+double Queue<T>::average()
+{
+    static_assert(std::is_arithmetic<T>::value, "average() only works for arithmetic types");
+
+    double sum = 0;
+    node_t *current = head;
+    size_t elements = 0;
+
+    do
+    {
+        sum += current->data;
+        current = current->next;
+        elements++;
+    } while (current != head && elements < count);
+
+    return sum / elements;
+}
+
+template <typename T>
+bool Queue<T>::resize(size_t num)
+{
+    // enter new size (at least bigger than 2)
+    // if new size is smaller remove the oldest nodes first
+    // set new size
+    bool status{false};
+    if (num < 3)
+    {
+        status = false;
+    }
+    else
+    {
+        while (count > num)
+        {
+            T temp;
+            dequeue(temp);
+        }
+        maxSize = num;
+        status = true;
+    }
+    return status;
+}
+
+template <typename T>
 void Queue<T>::clear(void)
 {
-    while (head != nullptr)
+    while (count > 0)
     {
-        tail = head;
-        head = head->next;
-        tail->~node_t();
-        memory.free(tail);
+        T temp;
+        dequeue(temp);
     }
-
-    count = 0;
-    tail = head;
 }
 #endif // QUEUE_H
