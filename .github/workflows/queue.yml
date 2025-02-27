@@ -20,6 +20,4 @@ jobs:
                 sudo apt-get install cmake build-essential
                 sudo apt-get install googletest google-mock libgtest-dev libgmock-dev
             - name: Build and Run The Test
-              run: |
-                mkdir build && cd build && cmake ..
-                make test_queue && ./test_queue
+              run: make run
